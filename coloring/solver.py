@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-import networkx as nx
 import numpy as np
 import random
 import math
@@ -27,11 +26,10 @@ def solve_it(input_data):
 
     Adjs_sorted = sort_degree_largest_first(Adjs)
     if edge_count < 1000:
-    	obj, opt, solution = mip(node_count, edges, Adjs_sorted,
-                              verbose=False,
-                              num_threads=1,
-                              time_limit=3600*4,
-                              greedy_init=True)
+        obj, opt, solution = mip(node_count, edges, Adjs_sorted,
+                                 verbose=False,
+                                 num_threads=1,
+                                 time_limit=3600 * 4)
     else:
         obj, opt, solution = greedy(Adjs_sorted, list(range(node_count)), 1000)
 
@@ -42,7 +40,7 @@ def solve_it(input_data):
     return output_data
 
 
-def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_limit=None, greedy_init=False):
+def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_limit=None):
     m = Model("graph_coloring")
     m.setParam('OutputFlag', verbose)
     if num_threads:
@@ -53,47 +51,35 @@ def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_li
     if time_limit:
         m.setParam("TimeLimit", time_limit)
 
-    init_color_count, _, greedy_color = greedy(
-        Adjs_sorted, list(range(node_count)), 1000)
+    init_color_count, _, greedy_color = greedy(Adjs_sorted, list(range(node_count)), 1000)
+    # sử dụng một thuật toán greedy để tìm ra cận trên cho số màu của đồ thị
 
-    colors = m.addVars(init_color_count, vtype=GRB.BINARY, name="colors")
-    nodes = m.addVars(node_count, init_color_count,
-                      vtype=GRB.BINARY, name="assignments")
-    # nodes[(node_idx, color_idx)]
+    colors = m.addVars(init_color_count, vtype=GRB.BINARY, name="colors") # biến quyết định số màu
+    nodes = m.addVars(node_count, init_color_count , vtype=GRB.BINARY, name="assignments") # biến quyết định đỉnh tương
+                                                                                        # ứng với màu nào đó
+    # node[i][j] = 1 biểu thị đỉnh i được tô bằng màu j
+    for i in range(init_color_count):
+        colors[i].setAttr("Start", 0)
+        for j in range(node_count):
+            nodes[(j, i)].setAttr("Start", 0)
 
-    if greedy_init:
-        for i in range(init_color_count):
-            colors[i].setAttr("Start", 0)
-            for j in range(node_count):
-                nodes[(j, i)].setAttr("Start", 0)
+    for i, j in enumerate(greedy_color): # i là số thứ tự đỉnh , j là số thứ tự màu mà i được tô
+        colors[j].setAttr("Start", 1)
+        nodes[(i, j)].setAttr("Start", 1)
 
-        for i, j in enumerate(greedy_color):
-            colors[j].setAttr("Start", 1)
-            nodes[(i, j)].setAttr("Start", 1)
+    m.setObjective(quicksum(colors), GRB.MINIMIZE) # hàm mục tiêu tối ưu sao số màu là nhỏ nhất
 
-    m.setObjective(quicksum(colors), GRB.MINIMIZE)
+    # Mỗi đỉnh chỉ có một màu
+    m.addConstrs((nodes.sum(i, "*") == 1 for i in range(node_count)), name="Chi co mot mau")
 
-    # each node has only one color
-    m.addConstrs((nodes.sum(i, "*") == 1
-                  for i in range(node_count)),
-                 name="eq1")
+    # Chỉ tô màu cho đỉnh trong danh sách các màu đã tìm kiếm
+    m.addConstrs((nodes[(i, k)] - colors[k] <= 0 for i in range(node_count) for k in range(init_color_count)), name="gioi han to")
 
-    # only color in use can be assigned at nodes
-    m.addConstrs((nodes[(i, k)] - colors[k] <= 0
-                  for i in range(node_count)
-                  for k in range(init_color_count)),
-                 name="ieq2")
+    # Những đỉnh kề nhau sẽ có màu khác nhau
+    m.addConstrs((nodes[(edge[0], k)] + nodes[(edge[1], k)] <= 1 for edge in edges for k in range(init_color_count)), name="ke nhau")
 
-    # vertices sharing one edge have different colors
-    m.addConstrs((nodes[(edge[0], k)] + nodes[(edge[1], k)] <= 1
-                  for edge in edges
-                  for k in range(init_color_count)),
-                 name="ieq3")
-
-    # color index should be as low as possible
-    m.addConstrs((colors[i] - colors[i + 1] >= 0
-                  for i in range(init_color_count - 1)),
-                 name="ieq4")
+    # chỉ số màu nhỏ nhất có thể
+    m.addConstrs((colors[i] - colors[i + 1] >= 0 for i in range(init_color_count - 1)), name="chi so mau nho nhat co the")
 
     m.update()
     m.optimize()
@@ -112,11 +98,11 @@ def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_li
 
 
 def sort_degree_largest_first(Adjs):
-	Adjs_sorted = {}
-	Adjs = sorted(Adjs.items(), key=lambda kv: len(kv[1]))
-	for item in Adjs:
-		Adjs_sorted[item[0]] = item[1]
-	return Adjs_sorted
+    Adjs_sorted = {}
+    Adjs = sorted(Adjs.items(), key=lambda kv: len(kv[1]))
+    for item in Adjs:
+        Adjs_sorted[item[0]] = item[1]
+    return Adjs_sorted
 
 
 def createAdjs(node_count, edge_count, edges):
@@ -151,7 +137,7 @@ def greedy(adjs, order, max_shuffle_count):
         color = dict()
         for node in order:
             used_neighbour_colors = [color[nbr] for nbr in adjs[node]
-                                    if nbr in color]
+                                     if nbr in color]
             color[node] = first_available(used_neighbour_colors)
         color_values = color.values()
         count_color = max(color_values)
@@ -162,15 +148,17 @@ def greedy(adjs, order, max_shuffle_count):
     for entry in saved:
         if entry == max_color:
             color_drawed = saved[entry]
-    return max_color + 1 , 0, color_drawed
+    return max_color + 1, 0, color_drawed
 
 
 if __name__ == '__main__':
     import sys
+
     if len(sys.argv) > 1:
         file_location = sys.argv[1].strip()
         with open(file_location, 'r') as input_data_file:
             input_data = input_data_file.read()
         print(solve_it(input_data))
     else:
-        print('This test requires an input file.  Please select one from the data directory. (i.e. python solver.py ./data/gc_4_1)')
+        print(
+            'This test requires an input file.  Please select one from the data directory. (i.e. python solver.py ./data/gc_4_1)')
