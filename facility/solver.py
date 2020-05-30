@@ -91,11 +91,13 @@ def trivial_solve(facilities, customers):
 
 
 def mip(facilities, customers, verbose=False, num_threads=None, time_limit=None):
+
     f_count = len(facilities)
     c_count = len(customers)
 
     m = Model("facility_location")
     m.setParam('OutputFlag', verbose)
+
     if num_threads:
         m.setParam("Threads", num_threads)
     else:
@@ -104,43 +106,39 @@ def mip(facilities, customers, verbose=False, num_threads=None, time_limit=None)
     if time_limit:
         m.setParam("TimeLimit", time_limit)
 
-    x = m.addVars(f_count, vtype=GRB.BINARY, name="x")
-    y = m.addVars(c_count, f_count, vtype=GRB.BINARY, name="y")
+    a = m.addVars(f_count, vtype=GRB.BINARY, name="a") # a[j] lưu trữ số khách hàng được phục vụ bởi kho lưu trữ j
+    c = m.addVars(c_count, f_count, vtype=GRB.BINARY, name="c") # c[(i , j)] biểu thị khách hàng i được phục vụ bởi kho lưu trữ
 
-    m.setObjective(LinExpr((facilities[j].setup_cost, x[j]) for j in range(f_count)) +
-                   LinExpr((dist(customers[i].location, facilities[j].location), y[(i, j)])
-                           for i in range(c_count) for j in range(f_count)), GRB.MINIMIZE)
+    m.setObjective(LinExpr((facilities[j].setup_cost, a[j]) for j in range(f_count)) +
+                   LinExpr((dist(customers[i].location, facilities[j].location), c[(i, j)])
+                           for i in range(c_count) for j in range(f_count)), GRB.MINIMIZE) # hàm mục tiêu
 
-    m.addConstrs((y.sum(i, "*") == 1
+    m.addConstrs((c.sum(i, "*") == 1
                   for i in range(c_count)),
-                 name="assign_constr")
+                 name="moi khach hang chi duoc phuc vu boi duy nhat mot kho luu tru")
 
-    m.addConstrs((x[j] >= y.sum(i, j)
-                  for i in range(c_count)
-                  for j in range(f_count)),
-                 name="xy_corr_constr")
-
-    m.addConstrs((LinExpr((customers[i].demand, y[(i, j)])
+    m.addConstrs((LinExpr((customers[i].demand, c[(i, j)])
                           for i in range(c_count)) <= facilities[j].capacity
                   for j in range(f_count)),
-                 name="cap_constr")
+                 name="quan he rang buoc") # tổng chi phí yêu cầu các khách hàng liên kết 
+    									   # với kho lưu trữ j không vượt quá khả năng lưu trữ của kho j
 
     m.update()
     m.optimize()
 
     total_cost = m.getObjective().getValue()
-    isol = [[int(m.getVarByName("y[{},{}]".format(i, j)).x)
+    solve = [[int(m.getVarByName("c[{},{}]".format(i, j)).x)
              for j in range(f_count)]
             for i in range(c_count)]
-    soln = [j for i in range(c_count)
-            for j in range(f_count) if isol[i][j] == 1]
+    solution = [j for i in range(c_count)
+            for j in range(f_count) if solve[i][j] == 1]
 
     if m.status == 2:
         opt = 1
     else:
         opt = 0
 
-    return total_cost, opt, soln
+    return total_cost, opt, solution
 
 
 if __name__ == '__main__':

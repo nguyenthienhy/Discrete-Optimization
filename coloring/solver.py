@@ -6,7 +6,6 @@ import math
 from psutil import cpu_count
 from gurobipy import *
 
-
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
     # parse the input
@@ -25,11 +24,15 @@ def solve_it(input_data):
     Adjs = createAdjs(node_count, edge_count, edges)
 
     Adjs_sorted = sort_degree_largest_first(Adjs)
-    if edge_count < 1000:
+
+    time_limit = 0
+
+    if edge_count < 3000:
+        time_limit = 15 * 60
         obj, opt, solution = mip(node_count, edges, Adjs_sorted,
                                  verbose=False,
-                                 num_threads=1,
-                                 time_limit=3600 * 4)
+                                 num_threads=3,
+                                 time_limit=time_limit)
     else:
         obj, opt, solution = greedy(Adjs_sorted, list(range(node_count)), 1000)
 
@@ -54,39 +57,39 @@ def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_li
     init_color_count, _, greedy_color = greedy(Adjs_sorted, list(range(node_count)), 1000)
     # sử dụng một thuật toán greedy để tìm ra cận trên cho số màu của đồ thị
 
-    colors = m.addVars(init_color_count, vtype=GRB.BINARY, name="colors") # biến quyết định số màu
-    nodes = m.addVars(node_count, init_color_count , vtype=GRB.BINARY, name="assignments") # biến quyết định đỉnh tương
-                                                                                        # ứng với màu nào đó
+    colors = m.addVars(init_color_count, vtype=GRB.BINARY, name="colors")  # biến quyết định số màu
+    nodes = m.addVars(node_count, init_color_count, vtype=GRB.BINARY, name="assignments")  # biến quyết định đỉnh tương
+    # ứng với màu nào đó
     # node[i][j] = 1 biểu thị đỉnh i được tô bằng màu j
     for i in range(init_color_count):
         colors[i].setAttr("Start", 0)
         for j in range(node_count):
             nodes[(j, i)].setAttr("Start", 0)
 
-    for i, j in enumerate(greedy_color): # i là số thứ tự đỉnh , j là số thứ tự màu mà i được tô
+    for i, j in enumerate(greedy_color):  # i là số thứ tự đỉnh , j là số thứ tự màu mà i được tô
         colors[j].setAttr("Start", 1)
         nodes[(i, j)].setAttr("Start", 1)
 
-    m.setObjective(quicksum(colors), GRB.MINIMIZE) # hàm mục tiêu tối ưu sao số màu là nhỏ nhất
+    m.setObjective(quicksum(colors), GRB.MINIMIZE)  # hàm mục tiêu tối ưu sao số màu là nhỏ nhất
 
     # Mỗi đỉnh chỉ có một màu
     m.addConstrs((nodes.sum(i, "*") == 1 for i in range(node_count)), name="Chi co mot mau")
 
-    # Chỉ tô màu cho đỉnh trong danh sách các màu đã tìm kiếm
-    m.addConstrs((nodes[(i, k)] - colors[k] <= 0 for i in range(node_count) for k in range(init_color_count)), name="gioi han to")
+    m.addConstrs((nodes[(i, k)] - colors[k] <= 0 for i in range(node_count) for k in range(init_color_count)),
+                 name="add constr")
 
     # Những đỉnh kề nhau sẽ có màu khác nhau
-    m.addConstrs((nodes[(edge[0], k)] + nodes[(edge[1], k)] <= 1 for edge in edges for k in range(init_color_count)), name="ke nhau")
+    m.addConstrs((nodes[(edge[0], k)] + nodes[(edge[1], k)] <= 1 for edge in edges for k in range(init_color_count)),
+                 name="ke nhau")
 
-    # chỉ số màu nhỏ nhất có thể
-    m.addConstrs((colors[i] - colors[i + 1] >= 0 for i in range(init_color_count - 1)), name="chi so mau nho nhat co the")
+    m.addConstrs((colors[i] - colors[i + 1] >= 0 for i in range(init_color_count - 1)), name="add constr 2")
 
     m.update()
     m.optimize()
 
     isol = [int(var.x) for var in m.getVars()]
     color_count = sum(isol[:init_color_count])
-    soln = [j for i in range(node_count) for j in range(init_color_count)
+    solution = [j for i in range(node_count) for j in range(init_color_count)
             if isol[init_color_count + init_color_count * i + j] == 1]
 
     if m.status == 2:
@@ -94,7 +97,7 @@ def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_li
     else:
         opt = 0
 
-    return color_count, opt, soln
+    return color_count, opt, solution
 
 
 def sort_degree_largest_first(Adjs):
@@ -118,7 +121,7 @@ def createAdjs(node_count, edge_count, edges):
     return Adjs
 
 
-def first_available(color_list):
+def first_available(color_list): # trả lại số màu nhỏ nhất chưa được tô
     color_set = set(color_list)
     count = 0
     while True:
@@ -134,11 +137,11 @@ def greedy(adjs, order, max_shuffle_count):
     max_color = 999
     while shuffle_count <= max_shuffle_count:
         random.shuffle(order)
-        color = dict()
+        color = dict() # key : đỉnh , values : màu
         for node in order:
             used_neighbour_colors = [color[nbr] for nbr in adjs[node]
-                                     if nbr in color]
-            color[node] = first_available(used_neighbour_colors)
+                                     if nbr in color] # các màu đã được tô
+            color[node] = first_available(used_neighbour_colors) # tô màu nhỏ nhất cho đỉnh hiện tại
         color_values = color.values()
         count_color = max(color_values)
         if count_color < max_color:
@@ -148,7 +151,7 @@ def greedy(adjs, order, max_shuffle_count):
     for entry in saved:
         if entry == max_color:
             color_drawed = saved[entry]
-    return max_color + 1, 0, color_drawed
+    return max_color + 1 , 0 , color_drawed
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import random
+
 def tsp_christofides(data):
     G = build_graph(data)
     MSTree = minimum_spanning_tree(G)

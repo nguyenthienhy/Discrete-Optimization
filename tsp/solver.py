@@ -5,6 +5,7 @@ from modules.tsp_2_opt import *
 from modules.tsp_Constraint import tsp_constraint
 from modules.tsp_Christofides import tsp_christofides
 import numpy as np
+import math
 
 Point = namedtuple("Point", ['x', 'y'])
 
@@ -28,7 +29,7 @@ def solve_it(input_data):
     elif 1000 <= nodeCount < 10000:
         count_run = 0
         saved = []
-        optimal_obj = 999999999
+        optimal_obj = math.inf
         obj , solution = 0 , list(range(0 , nodeCount))
         while count_run <= 20:
             obj_t , solution_t = tsp_christofides(points)
