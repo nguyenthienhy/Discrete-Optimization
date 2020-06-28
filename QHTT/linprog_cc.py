@@ -1,5 +1,5 @@
 import numpy as np
-import branch_and_bound as bb
+import linprog_bb as bb
 from scipy.optimize import linprog
 import gurobipy as gp
 from gurobipy import *
