@@ -145,26 +145,26 @@ def greedy(adjs, order, max_shuffle_count):
     return max_color + 1 , 0 , color_drawed
 
 def constraint_programing(edges, node_count):
+	count_color , _ , _ = greedy_with_many_stragies(edges , node_count)
     model = cp_model.CpModel()
-    cvar = [model.NewIntVar(0,int(math.sqrt(2*edge_count)),str(i)) for i in range(node_count)]
+    colors = [model.NewIntVar(0 , count_color - 1 , str(i)) for i in range(node_count)]
     solution =[]
     for e in edges:
-        model.Add(cvar[e[0]] != cvar[e[1]])
-    count_color = int(math.sqrt(2*edge_count))+1
+        model.Add(colors[e[0]] != colors[e[1]])
     start_time = time.time()
     while True:
         end_time = time.time()
-        if int(end_time)-int(start_time) > 60*10:
+        if end_time - start_time > 60*10:
             break
         for i in range(node_count):
-            model.Add(cvar[i] < count_color)
+            model.Add(colors[i] < count_color)
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = 60*10
         status = solver.Solve(model)
         if status == cp_model.FEASIBLE:
             solution.clear()
             for i in range(node_count):
-                solution.append( int(solver.Value(cvar[i])))
+                solution.append(int(solver.Value(colors[i])))
             count_color = max(solution) 
         else:
             break
@@ -172,22 +172,20 @@ def constraint_programing(edges, node_count):
 
 
 def greedy_with_many_stragies(edges , node_count):
+
     graph = nx.Graph()
     graph.add_nodes_from(range(node_count))
     graph.add_edges_from(edges)
 
-    strategies = [nx.coloring.strategy_largest_first,
-                  nx.coloring.strategy_random_sequential,
-                  nx.coloring.strategy_smallest_last,
-                  nx.coloring.strategy_independent_set,
-                  nx.coloring.strategy_connected_sequential_bfs,
-                  nx.coloring.strategy_connected_sequential_dfs,
-                  nx.coloring.strategy_connected_sequential,
+    strategies = [nx.coloring.strategy_largest_first, # theo số bậc
+                  nx.coloring.strategy_random_sequential, # ngẫu nhiên thứ tự
+                  nx.coloring.strategy_connected_sequential_bfs, # duyệt theo thứ tự BFS
+                  nx.coloring.strategy_connected_sequential_dfs, # duyệt theo thứ tự DFS
                   nx.coloring.strategy_saturation_largest_first]
 
     best_color_count, best_coloring = node_count, {i: i for i in range(node_count)}
     for strategy in strategies:
-        curr_coloring = nx.coloring.greedy_color(G=graph, strategy=strategy)
+        curr_coloring = nx.coloring.greedy_color(G = graph, strategy = strategy)
         curr_color_count = max(curr_coloring.values()) + 1
         if curr_color_count < best_color_count:
             best_color_count = curr_color_count
