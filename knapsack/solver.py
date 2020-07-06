@@ -5,7 +5,7 @@ from collections import deque
 import heapq
 
 Item = namedtuple("Item", ['index', 'value', 'weight', 'density'])
-Node = recordclass('Node', 'level value weight items')
+Node = namedtuple('Node', ['level' , 'value' ,  'weight' ,  'items'])
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -61,29 +61,29 @@ def mip(capacity, items, verbose=False, num_threads=None):
     return int(m.objVal), opt, [int(var.x) for var in m.getVars()]
 
 def dynamic_programming(capacity , items):
-	n = len(items)
-	K = [[0 for w in range(W + 1)] 
-            for i in range(n + 1)]
+	item_count = len(items)
+	T = [[0 for w in range(capacity + 1)] 
+            for i in range(item_count + 1)]
     wt = [item.weight for item in items]
     val = [item.value for item in items]
-    taken = [0 for i in range(n)] 
-    for i in range(n + 1): 
-        for w in range(W + 1): 
+    taken = [0 for i in range(item_count)] 
+    for i in range(item_count + 1): 
+        for w in range(capacity + 1): 
             if i == 0 or w == 0: 
-                K[i][w] = 0
+                T[i][w] = 0
             elif wt[i - 1] <= w: 
-                K[i][w] = max(val[i - 1]  
-                  + K[i - 1][w - wt[i - 1]], 
-                               K[i - 1][w]) 
+                T[i][w] = max(val[i - 1]  
+                  + T[i - 1][w - wt[i - 1]], 
+                               T[i - 1][w]) 
             else: 
-                K[i][w] = K[i - 1][w] 
-    res = K[n][W] 
+                T[i][w] = T[i - 1][w] 
+    res = T[item_count][capacity] 
     obj = res 
-    w = W 
+    w = capacity 
     for i in range(n, 0, -1): 
         if res <= 0: 
             break
-        if res == K[i - 1][w]: 
+        if res == T[i - 1][w]: 
             continue
         else:  
             taken[i - 1] = 1 
@@ -106,14 +106,14 @@ def bound(u, capacity, item_count, items):
             j = j + 1
         
         k = j
-        if(k <= item_count - 1):
+        if k <= item_count - 1:
             result = result + (capacity - totweight)*items[k].value / items[k].weight
 
     return result
 
  def branch_and_bound(capacity , items):
  	item_count = len(items)
- 	items = sorted(items, key=lambda item: item.weight / item.value)
+ 	items = sorted(items, key = lambda item: item.weight / item.value)
 
     v = Node(level = -1, value = 0, weight = 0, items = [])
     Q = deque([])
@@ -123,6 +123,7 @@ def bound(u, capacity, item_count, items):
     bestItems = []
 
     while(len(Q) != 0):
+
         v = Q[0]
         Q.popleft()
         u = Node(level = None, weight = None, value = None, items = [])
@@ -132,7 +133,7 @@ def bound(u, capacity, item_count, items):
         u.items = list(v.items)
         u.items.append(items[u.level].index)
 
-        if(u.weight <= capacity and u.value > maxValue):
+        if u.weight <= capacity and u.value > maxValue:
             maxValue = u.value
             bestItems = u.items
         
