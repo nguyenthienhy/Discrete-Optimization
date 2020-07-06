@@ -3,8 +3,30 @@
 import numpy as np
 import random
 import math
-from psutil import cpu_count
 from gurobipy import *
+from ortools.sat.python import cp_model
+import time
+import networkx as nx
+
+def sort_degree_largest_first(Adjs):
+    Adjs_sorted = {}
+    Adjs = sorted(Adjs.items(), key=lambda kv: len(kv[1]))
+    for item in Adjs:
+        Adjs_sorted[item[0]] = item[1]
+    return Adjs_sorted
+
+
+def createAdjs(node_count, edge_count, edges):
+    Adjs = {}
+    for node in range(node_count):
+        Adjs[node] = []
+    for node in range(node_count):
+        for edge in range(edge_count):
+            if (edges[edge])[0] == node:
+                Adjs[node].append((edges[edge])[1])
+            elif (edges[edge])[1] == node:
+                Adjs[node].append((edges[edge])[0])
+    return Adjs
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -27,14 +49,13 @@ def solve_it(input_data):
 
     time_limit = 0
 
-    if edge_count < 3000:
+    if node_count <= 50:
         time_limit = 15 * 60
-        obj, opt, solution = mip(node_count, edges, Adjs_sorted,
-                                 verbose=False,
-                                 num_threads=3,
-                                 time_limit=time_limit)
+        obj, opt, solution = mip(node_count, edges, Adjs_sorted)
+    elif 50 < node_count <= 500:
+    	obj, opt, solution = constraint_programing(edges , node_count)
     else:
-        obj, opt, solution = greedy(Adjs_sorted, list(range(node_count)), 1000)
+        obj, opt, solution = greedy_with_many_stragies(edges , node_count)
 
     # prepare the solution in the specified output format
     output_data = str(obj) + ' ' + str(opt) + '\n'
@@ -43,17 +64,8 @@ def solve_it(input_data):
     return output_data
 
 
-def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_limit=None):
+def mip(node_count, edges, Adjs_sorted):
     m = Model("graph_coloring")
-    m.setParam('OutputFlag', verbose)
-    if num_threads:
-        m.setParam("Threads", num_threads)
-    else:
-        m.setParam("Threads", cpu_count())
-
-    if time_limit:
-        m.setParam("TimeLimit", time_limit)
-
     init_color_count, _, greedy_color = greedy(Adjs_sorted, list(range(node_count)), 1000)
     # sử dụng một thuật toán greedy để tìm ra cận trên cho số màu của đồ thị
 
@@ -100,27 +112,6 @@ def mip(node_count, edges, Adjs_sorted, verbose=False, num_threads=None, time_li
     return color_count, opt, solution
 
 
-def sort_degree_largest_first(Adjs):
-    Adjs_sorted = {}
-    Adjs = sorted(Adjs.items(), key=lambda kv: len(kv[1]))
-    for item in Adjs:
-        Adjs_sorted[item[0]] = item[1]
-    return Adjs_sorted
-
-
-def createAdjs(node_count, edge_count, edges):
-    Adjs = {}
-    for node in range(node_count):
-        Adjs[node] = []
-    for node in range(node_count):
-        for edge in range(edge_count):
-            if (edges[edge])[0] == node:
-                Adjs[node].append((edges[edge])[1])
-            elif (edges[edge])[1] == node:
-                Adjs[node].append((edges[edge])[0])
-    return Adjs
-
-
 def first_available(color_list): # trả lại số màu nhỏ nhất chưa được tô
     color_set = set(color_list)
     count = 0
@@ -153,10 +144,58 @@ def greedy(adjs, order, max_shuffle_count):
             color_drawed = saved[entry]
     return max_color + 1 , 0 , color_drawed
 
+def constraint_programing(edges, node_count):
+    model = cp_model.CpModel()
+    cvar = [model.NewIntVar(0,int(math.sqrt(2*edge_count)),str(i)) for i in range(node_count)]
+    solution =[]
+    for e in edges:
+        model.Add(cvar[e[0]] != cvar[e[1]])
+    count_color = int(math.sqrt(2*edge_count))+1
+    start_time = time.time()
+    while True:
+        end_time = time.time()
+        if int(end_time)-int(start_time) > 60*10:
+            break
+        for i in range(node_count):
+            model.Add(cvar[i] < count_color)
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = 60*10
+        status = solver.Solve(model)
+        if status == cp_model.FEASIBLE:
+            solution.clear()
+            for i in range(node_count):
+                solution.append( int(solver.Value(cvar[i])))
+            count_color = max(solution) 
+        else:
+            break
+    return count_color + 1 , 0 , solution
+
+
+def greedy_with_many_stragies(edges , node_count):
+    graph = nx.Graph()
+    graph.add_nodes_from(range(node_count))
+    graph.add_edges_from(edges)
+
+    strategies = [nx.coloring.strategy_largest_first,
+                  nx.coloring.strategy_random_sequential,
+                  nx.coloring.strategy_smallest_last,
+                  nx.coloring.strategy_independent_set,
+                  nx.coloring.strategy_connected_sequential_bfs,
+                  nx.coloring.strategy_connected_sequential_dfs,
+                  nx.coloring.strategy_connected_sequential,
+                  nx.coloring.strategy_saturation_largest_first]
+
+    best_color_count, best_coloring = node_count, {i: i for i in range(node_count)}
+    for strategy in strategies:
+        curr_coloring = nx.coloring.greedy_color(G=graph, strategy=strategy)
+        curr_color_count = max(curr_coloring.values()) + 1
+        if curr_color_count < best_color_count:
+            best_color_count = curr_color_count
+            best_coloring = curr_coloring
+    return best_color_count, 0, [best_coloring[i] for i in range(node_count)]
 
 if __name__ == '__main__':
     import sys
-
     if len(sys.argv) > 1:
         file_location = sys.argv[1].strip()
         with open(file_location, 'r') as input_data_file:

@@ -1,8 +1,11 @@
 from collections import namedtuple
-from psutil import cpu_count
 from gurobipy import *
+from recordclass import recordclass
+from collections import deque
+import heapq
 
 Item = namedtuple("Item", ['index', 'value', 'weight', 'density'])
+Node = recordclass('Node', 'level value weight items')
 
 def solve_it(input_data):
     # Modify this code to run your optimization algorithm
@@ -21,7 +24,12 @@ def solve_it(input_data):
         v, w = int(parts[0]), int(parts[1])
         items.append(Item(i-1, v, w, 1.0 * v / w))
 
-    obj, opt, taken = mip(capacity, items)
+    if item_count <= 200:
+    	obj, opt, taken = dynamic_programming(capacity, items)
+    elif 200 < item_count <= 1000:
+    	obj , opt , taken = mip(capacity , items)
+    else:
+    	obj , opt , taken = branch_and_bound(capacity , items)
 
     # prepare the solution in the specified output format
     output_data = str(obj) + ' ' + str(opt) + '\n'
@@ -35,13 +43,6 @@ def mip(capacity, items, verbose=False, num_threads=None):
     weights = [item.weight for item in items]
 
     m = Model("knapsack")
-
-    # thiết lập các thông số của mô hình
-    m.setParam('OutputFlag', verbose)
-    if num_threads:
-        m.setParam("Threads", num_threads)
-    else:
-        m.setParam("Threads", cpu_count())
 
     x = m.addVars(item_count, vtype=GRB.BINARY, name="items") # biến quyết định của bài toán
 
@@ -58,6 +59,103 @@ def mip(capacity, items, verbose=False, num_threads=None):
         opt = 0
 
     return int(m.objVal), opt, [int(var.x) for var in m.getVars()]
+
+def dynamic_programming(capacity , items):
+	n = len(items)
+	K = [[0 for w in range(W + 1)] 
+            for i in range(n + 1)]
+    wt = [item.weight for item in items]
+    val = [item.value for item in items]
+    taken = [0 for i in range(n)] 
+    for i in range(n + 1): 
+        for w in range(W + 1): 
+            if i == 0 or w == 0: 
+                K[i][w] = 0
+            elif wt[i - 1] <= w: 
+                K[i][w] = max(val[i - 1]  
+                  + K[i - 1][w - wt[i - 1]], 
+                               K[i - 1][w]) 
+            else: 
+                K[i][w] = K[i - 1][w] 
+    res = K[n][W] 
+    obj = res 
+    w = W 
+    for i in range(n, 0, -1): 
+        if res <= 0: 
+            break
+        if res == K[i - 1][w]: 
+            continue
+        else:  
+            taken[i - 1] = 1 
+            res = res - val[i - 1] 
+            w = w - wt[i - 1]
+    return obj , 1 , taken
+
+
+def bound(u, capacity, item_count, items):
+    if(u.weight >= capacity):
+        return 0
+    else:
+        result = u.value
+        j = u.level + 1
+        totweight = u.weight
+
+        while(j < item_count and totweight + items[j].weight <= capacity):
+            totweight += items[j].weight
+            result += items[j].value
+            j = j + 1
+        
+        k = j
+        if(k <= item_count - 1):
+            result = result + (capacity - totweight)*items[k].value / items[k].weight
+
+    return result
+
+ def branch_and_bound(capacity , items):
+ 	item_count = len(items)
+ 	items = sorted(items, key=lambda item: item.weight / item.value)
+
+    v = Node(level = -1, value = 0, weight = 0, items = [])
+    Q = deque([])
+    Q.append(v)
+
+    maxValue = 0
+    bestItems = []
+
+    while(len(Q) != 0):
+        v = Q[0]
+        Q.popleft()
+        u = Node(level = None, weight = None, value = None, items = [])
+        u.level = v.level + 1
+        u.weight = v.weight + items[u.level].weight
+        u.value = v.value + items[u.level].value
+        u.items = list(v.items)
+        u.items.append(items[u.level].index)
+
+        if(u.weight <= capacity and u.value > maxValue):
+            maxValue = u.value
+            bestItems = u.items
+        
+        bound_u = bound(u, capacity, item_count, items)
+
+        if bound_u > maxValue:
+            Q.append(u)
+        
+        u = Node(level = None, weight = None, value = None, items = [])
+        u.level = v.level + 1
+        u.weight = v.weight
+        u.value = v.value
+        u.items = list(v.items)
+
+        bound_u = bound(u, capacity, item_count, items)
+        if bound_u > maxValue:
+            Q.append(u)
+    
+    taken = [0]*len(items)
+    for i in range(len(bestItems)):
+        taken[bestItems[i]] = 1
+    
+    return maxValue, 0 , taken
 
 if __name__ == '__main__':
     import sys
