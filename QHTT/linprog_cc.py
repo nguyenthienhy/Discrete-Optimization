@@ -306,9 +306,11 @@ def branchandcut(A, b, c):
             result = np.copy(result_cut)
             del A_cut, b_cut, c_cut, table_cut, result_cut
 
-def main():
-    path = 'data/sc_9_0'
-    converts = Convert(path)
+def readInput():
+    print("Input file name : ")
+    fileName = input()
+    converts = Convert(fileName)
     A, b, c = converts.ExportData()
     branchandcut(A, b, c)
-main()
+    
+readInput()
