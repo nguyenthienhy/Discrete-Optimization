@@ -91,7 +91,6 @@ def dynamic_programming(capacity , items):
             w = w - wt[i - 1]
     return obj , 1 , taken
 
-
 def bound(u, capacity, item_count, items):
     if(u.weight >= capacity):
         return 0
