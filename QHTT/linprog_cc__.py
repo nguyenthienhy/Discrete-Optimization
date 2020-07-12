@@ -157,8 +157,9 @@ def get_cut_and_constraints(x , c , a , b , num_values , num_constr):
 num_constr , num_values , a , b , c = bb.readInput()
 node, bestNode = init(c, a, b)
 bestNode = branch_and_cut(c , a , b , node , bestNode , num_values , num_constr)
-print("X : " + str(bestNode.x))
 print("Obj : " + str(bestNode.res))
+print("X : " + str(bestNode.x))
+
 
 
 

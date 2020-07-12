@@ -27,7 +27,7 @@ class BranchAndBound:
         for i in range (len(table)):
             result[i] = table[i][2]
         if table is None:
-            print("******")
+            print("None")
         else:
             for i in range (len(result)):
                 print("X[" + str(int(i)), "] = ", Fraction(result[i]).limit_denominator(100) , end = ", ")
@@ -57,7 +57,7 @@ class BranchAndBound:
         for i in range (len(table)):
             result[i] = table[i][2]
         if table is None:
-            print("******")
+            print("None")
         else:
             for i in range (len(result)):
                 print("X[" + str(int(i)), "] = ", Fraction(result[i]).limit_denominator(100) , end = ", ")
@@ -123,7 +123,6 @@ def branchandcut(A, b, c):
             result = np.zeros((len(table)))
             for i in range (len(table)):
                 result[i] = table[i][2]
-            print(result)
             break
         X = {}
         for i in range(len(A)):
