@@ -1,164 +1,315 @@
+from LinearProgram import simplex
 import numpy as np
-import linprog_bb as bb
-from scipy.optimize import linprog
-import gurobipy as gp
-from gurobipy import *
+from ConvertData import Convert
+from fractions import Fraction
+from ortools.algorithms import pywrapknapsack_solver
+import collections
 
-class Node:
-    def __init__(self, x, res, bounds, status):
-        self.x = x  # nghiệm bài toán hiện tại
-        self.res = res  # kết quả tối ưu hàm hiện tại
-        self.bounds = bounds  # các cận trên và cận dưới
-        self.status = status  # trạng thái của node hiện tại
+class BranchAndBound:
+    
+    def solve1(self, A, A_sub, b, c, c_sub):
+        sim = simplex(A, A_sub, b, c, c_sub)
+        table = sim.createtable()
+        table = sim.phrase1(table)
+        if table is None:
+            print("No solution Phrase 1")
+            return None, None, None
+        for i in range(len(table)):
+            table[i][1] = c[int(table[i][0])]
+        print("Phase 2:")
+        table = sim.phrase2(table)
+        if table is None:
+            print("No solution Phrase 2")
+            return None, None, None
+        obj = np.sum(table[:, 1]*table[:, 2])
+        print("Obj = ", Fraction(obj).limit_denominator(100))
+        result = np.zeros((len(table)))
+        for i in range (len(table)):
+            result[i] = table[i][2]
+        if table is None:
+            print("******")
+        else:
+            for i in range (len(result)):
+                print("X[" + str(int(i)), "] = ", Fraction(result[i]).limit_denominator(100) , end = ", ")
+            for i in range(len(table)):
+                for j in range (1, len(table[i])):
+                    table[i][j] = Fraction(table[i][j]).limit_denominator(100)
 
-def isInteger(x):
-    x_temp = np.array(x)
-    count = 0
-    for i in range(x_temp.shape[0]):
-        if np.floor(x_temp[i]) - x_temp[i] == 0:
-            count += 1
-    if count == x_temp.shape[0]:
-        return (True, None)
+        return result, table, obj
+    def solve2(self, A, A_sub, b, c, c_sub):
+        sim = simplex(A, A_sub, b, c, c_sub)
+        table = sim.createtable()
+        table = sim.phrase1(table)
+        if table is None:
+            print("No solution Phrase 1")
+            return None, None, None
+        for i in range(len(table)):
+            table[i][1] = c[int(table[i][0])]
+
+        table = sim.phrase2Min(table)
+        if table is None:
+            print("No solution Phrase 2")
+            return None, None, None
+
+        obj = np.sum(table[:, 1]*table[:, 2])
+        print("Obj = ", Fraction(obj).limit_denominator(100))
+        result = np.zeros((len(table)))
+        for i in range (len(table)):
+            result[i] = table[i][2]
+        if table is None:
+            print("******")
+        else:
+            for i in range (len(result)):
+                print("X[" + str(int(i)), "] = ", Fraction(result[i]).limit_denominator(100) , end = ", ")
+            for i in range(len(table)):
+                for j in range (1, len(table[i])):
+                    table[i][j] = Fraction(table[i][j]).limit_denominator(100)
+        return result, table, obj
+
+def isInteger(fraction):
+    if (fraction.denominator == 1):
+        return True
     else:
-        minNotInteger = math.inf
-        for i in range(x_temp.shape[0]):
-            if int(x_temp[i]) - x_temp[i] != 0:
-                minNotInteger = min(minNotInteger, x_temp[i])
-        for i in range(x_temp.shape[0]):
-            if minNotInteger == x_temp[i]:
-                return (False, i)
-
-def init(c, a, b):
-    n = c.shape[0]
-    bounds = [[0, None] for _ in range(n)]
-    appSolver = linprog(c, a, b, None, None)
-    x = appSolver.x
-    x = round_x(x)
-    res = appSolver.fun
-    res = round(res, 3)
-    status = appSolver.status
-    print("Initial result : ")
-    print("Values : " + str(x))
-    print("Obj : " + str(res))
-    node = Node(x, res, bounds, status)
-    best_node_status = 0
-    bestNode = Node([0, 0], 0, bounds, best_node_status)
-    return node, bestNode
-
-def round_x(x):
-    new_x = []
-    for xx in x:
-        new_x.append(round(xx, 2))
-    return np.array(new_x)
-
-def hasNoneInteger(x):
-    for i , xx in enumerate(x):
-        if int(xx) - xx != 0:
-            return i
-    return -1
-
-def hasCoverCut(num_values, z_constr, z_values, base):
-    m = gp.Model("knapsack")
-    # biến quyết định của bài toán
-    x = m.addVars(num_values, vtype=GRB.BINARY, name="decision_values")
-    m.setObjective(LinExpr(z_values, [x[i] for i in range(num_values)]), GRB.MINIMIZE)
-    m.addConstr(LinExpr(z_constr, [x[i] for i in range(num_values)]), GRB.GREATER_EQUAL, base, name="capacity")
-    m.update()
-    m.optimize()
-    if m.status == 3:
         return False
-    return True
 
-def getValues(num_values, z_constr, z_values, base):
-    m = gp.Model("knapsack")
-    # biến quyết định của bài toán
-    x = m.addVars(num_values, vtype=GRB.BINARY, name="decision_values")
-    m.setObjective(LinExpr(z_values, [x[i] for i in range(num_values)]), GRB.MINIMIZE)
-    m.addConstr(LinExpr(z_constr, [x[i] for i in range(num_values)]), GRB.GREATER_EQUAL, base , name="capacity")
-    m.update()
-    m.optimize()
-    return [int(var.x) for var in m.getVars()]
+def convert_f(fraction):
+    numerator = fraction.numerator
+    denominator = fraction.denominator
+    return Fraction(numerator%denominator, denominator)
 
-def isEqual(a , b):
-    for i in range(a.shape[1]):
-        if a[i] != b[i]:
-            return False
-    return True
+def branchandcut(A, b, c):
+    A_sub = np.hstack((A, np.eye(len(A))))
+    
+    c_sub = np.zeros((len(c)+len(A)))
+    for i in range(len(c), len(c) + len(A)):
+       c_sub[i] = 1
 
-def branch_and_cut(c , a , b , node , bestNode , num_values , num_constr):
-    print("Current values : " + str(node.x))
-    if node.status != 0:
-        bestNode.res = round(bestNode.res, 3)
-        return bestNode
-    # giá trị hàm mục tiêu hiện tại nhỏ hơn giá trị tốt nhất hiện có
-    if node.res < bestNode.res:
-        node.x = round_x(node.x)
-        (isIntegerOrNot, indexSplit) = bb.isInteger(node.x)
-        # nếu như tất cả các biến đều nguyên
-        if isIntegerOrNot == True:
-            bestNode = node
-            bestNode.res = round(bestNode.res, 3)
-            return bestNode
-        else:
-            c_new , a_new , b_new , num_values_new , num_constr_new = get_cut_and_constraints(node.x , c , a , b , num_values , num_constr)
-            if isEqual(c , c_new) and isEqual(a , a_new) and isEqual(b , b_new): # không tìm được cut
-                value_to_split = node.x[indexSplit]
-                lowbound = np.floor(value_to_split)
-                bounds_temp_L = np.array(node.bounds)
-                bounds_temp_L[indexSplit] = [0, lowbound]
-                resLeftChild = linprog(c, a, b, None, None, bounds_temp_L)
-                resLeftChild.x = round_x(resLeftChild.x)
-                nodeLeftChild = bb.Node(resLeftChild.x, resLeftChild.fun, bounds_temp_L, resLeftChild.status)
-                if nodeLeftChild.res <= bestNode.res:
-                    bestNode = branch_and_cut(c, a, b, nodeLeftChild, bestNode , num_values , num_constr)
+    sol = BranchAndBound()
+    flash = False
+    stop = False
+    step  = 0
+    print("=================Starting solving phase 2===============")
+    result, table, obj = sol.solve2(A, A_sub, b, c, c_sub)
+    if table is None:
+        print("No solution Two Phrase")
+        exit()
+    print()
+    print("Result after phase 2 : " + str(obj))
+    print("Tablue : ")
+    print(table)
+    print()
+    print("=================Starting branch and cut================")
+    while not flash:
+        print()
+        print("Iteration : " + str(step))
+        step += 1
+        flash = True
+        list_val = []   
+        for i in range(len(result)):
+            if (not isInteger(Fraction(result[i]).limit_denominator(100))):
+                flash = False
+                list_val.append(convert_f(Fraction(result[i]).limit_denominator(100)))
+            else:
+                list_val.append(0)
+        stop = True
+        for i in list_val:
+            if i > 0:
+                stop = False
+        if stop:
+            obj = np.sum(table[:, 1]*table[:, 2])
+            for i in range(len(result)):
+                print("X[" + str(int(table[i, 0])) , "] = " , Fraction(result[i]).limit_denominator(100) , end = ", ")
+            print("Obj = ", obj)
+            result = np.zeros((len(table)))
+            for i in range (len(table)):
+                result[i] = table[i][2]
+            print(result)
+            break
+        X = {}
+        for i in range(len(A)):
+            X[i] = 0
+        for i in range(len(table)):
+            X[table[i, 0]] = 1 - table[i, 2]
+
+        values = []
+        for i in X.keys():
+            values.append(-X[i])
+        flash_opt = False
+
+        for i in range(len(A)):
+            solver = pywrapknapsack_solver.KnapsackSolver(
+                pywrapknapsack_solver.KnapsackSolver.
+                KNAPSACK_MULTIDIMENSION_BRANCH_AND_BOUND_SOLVER, 'KnapsackExample')
+
+            weights = []
+            tem = []
+            for j in range(len(A[0])):
+                tem.append(-A[i][j])
+            weights.append(tem)
+            capacites = [-b[i]]
+
+            solver.Init(values, weights, capacites)
+            computed_value = solver.Solve()
+            x_idx = []
+            for k in range(len(values)):
+                if solver.BestSolutionContains(k):
+                    x_idx.append(k)
+                    flash_opt = True
+            
+            if flash_opt:
+                print("Has cover cut at constraint : " + str(i) + ", Continue Phase 2.....")
+                break
+
+        if flash_opt:
+            A_cut = np.copy(A)
+            b_cut = np.copy(b)
+            c_cut = np.copy(c)
+            constraint = []
+            sum = 0
+            for i in range(len(A_cut[0])):
+                if i in x_idx:
+                    constraint.append(1)
+                    sum += 1
                 else:
-                    upbound = np.ceil(value_to_split)
-                    bounds_temp_R = np.array(node.bounds)
-                    bounds_temp_R[indexSplit] = [upbound, None]
-                    resRightChild = linprog(c, a, b, None, None, bounds_temp_R)
-                    resRightChild.x = round_x(resRightChild.x)
-                    nodeRightChild = bb.Node(resRightChild.x, resRightChild.fun, bounds_temp_R, resRightChild.status)
-                    if nodeRightChild.res <= bestNode.res:
-                        bestNode = branch_and_cut(c, a, b, nodeLeftChild, bestNode , num_values , num_constr)
-            else: # nếu như tìm được cut thì quay lại bước 1
-                bestNode.res = linprog(c_new , a_new , b_new , None, None).fun
-                bestNode = branch_and_cut(c_new , a_new , b_new , node , bestNode , num_values_new , num_constr_new)
-    else:
-        bestNode.res = round(bestNode.res, 3)
-        return bestNode
-    bestNode.res = round(bestNode.res, 3)
-    return bestNode
+                    constraint.append(0)  
+            constraint.append(1)
+            a_coff = []
+            for i in range(len(A_cut)):
+                a_coff.append([0])
+            A_cut = np.hstack((A_cut, a_coff))
+            A_cut = np.vstack((A_cut, constraint))
+            b_cut = np.hstack((b_cut, np.array(sum - 1)))
+            c_cut = np.hstack((c_cut, 0))
+            
+            A_sub = np.hstack((A_cut, np.eye(len(A_cut))))
+            
+            c_sub = np.zeros((len(c_cut)+len(A_cut)))
+            for i in range(len(c_cut), len(c_cut) + len(A_cut)):
+                c_sub[i] = 1
+            result_cut, table_cut, obj_cut = sol.solve2(A_cut, A_sub, b_cut, c_cut, c_sub)
+        
+        if table_cut is None:
+            index = list_val.index(max(list_val))
+            value = result[index]
+            value_up = int(result[index]) + 1
+            value_low = int(result[index])
+            obj_up_global = np.sum(table[:, 1]*table[:, 2])
+            table_old = []
+            for i in table[:, 2]:
+                table_old.append(i)
+            
+            for i in range(len(table)):
+                if list_val[i] != 0:
+                    table[i, 2] = int(result[i])
+            obj_low_golbal = np.sum(table[:, 1]*table[:, 2])
+            for i in range(len(table)):
+                table[i, 2] = table_old[i]
 
-def get_cut_and_constraints(x , c , a , b , num_values , num_constr):
-    count = 0
-    for index in range(num_constr):
-        z_constr = np.concatenate((a[index] , [-1]) , axis = 0)
-        z_values = np.concatenate((1 - x , [0]) , axis = 0)
-        base = b[index]
-        if hasCoverCut(num_values + 1 , z_constr , z_values , base): # nếu như tìm được cover cut
-            print("has cover cut at constraint : " + str(index))
-            x_temp = getValues(num_values + 1 , z_constr , z_values , base)
-            x_temp = np.asarray(x_temp)
-            x_minus = x_temp - x
-            if np.sum(x_minus) < 1: # tìm được lát cắt hợp lệ
-                b = np.concatenate((b, [np.sum(x_temp) - 1 + x_temp[-1]]) , axis = 0)
-                x_temp = np.delete(x_temp , -1 , axis = 0)
-                a = np.concatenate((a , [x_temp]) , axis = 0)
-                num_constr_new = num_constr + 1
-                num_values_new = num_values + 1
-                return c , a , b , num_values_new , num_constr_new
+            
+            A1 = np.copy(A)
+            A2 = np.copy(A)
+            c1 = np.copy(c)
+            c2 = np.copy(c)
+            b1 = np.copy(b)
+            b2 = np.copy(b)
+
+            temA1 = []
+            a1 = []
+            for i in range(len(A1)):
+                a1.append([0])
+            A1 = np.hstack((A1, a1))
+            idx_A1 = table[index, 0]
+            for i in range(len(A1[0]) - 1):
+                if i == idx_A1:
+                    temA1.append(1)
+                else:
+                    temA1.append(0)
+            temA1.append(-1)  
+            A1 = np.vstack((A1, temA1))
+            b1 = np.hstack((b1, np.array(value_up)))
+            A_sub = np.hstack((A1, np.eye(len(A1))))
+            c1 = np.hstack((c1, np.array(0)))
+            c_sub = np.zeros((len(c1)+len(A1)))
+            for i in range(len(c1), len(c1) + len(A1)):
+                c_sub[i] = 1
+            result1, table1, obj1 = sol.solve2(A1, A_sub, b1, c1, c_sub)
+            if table1 is None:
+                print("No solution fesible")
+            else:
+                for row in table1: 
+                    for el in row: 
+                        print(Fraction(str(el)).limit_denominator(100), end ='\t') 
+                    print()
+            temA2 = []
+            a2 = []
+            for i in range(len(A2)):
+                a2.append([0])
+            A2 = np.hstack((A2, a2))
+
+            idx_A2 = table[index, 0]
+            for i in range(len(A2[0]) - 1):
+                if i == idx_A2:
+                    temA2.append(1)
+                else:
+                    temA2.append(0)
+            temA2.append(1)  
+            A2 = np.vstack((A2, temA2))
+            b2 = np.hstack((b2, np.array(value_low)))
+            A_sub = np.hstack((A2, np.eye(len(A2))))
+            c2 = np.hstack((c2, np.array(0)))
+            c_sub = np.zeros((len(c2)+len(A2)))
+            for i in range(len(c2), len(c2) + len(A2)):
+                c_sub[i] = 1
+            result2, table2, obj2 = sol.solve2(A2, A_sub, b2, c2, c_sub)
+            if table2 is None:
+                print("No solution Fesible")
+            else:
+                for row in table2: 
+                    for el in row: 
+                        print(Fraction(str(el)).limit_denominator(100), end ='\t') 
+                    print()
+            if ((obj1 is None) and (obj2 is None)):
+                print("No solution of problem")
+                exit()
+            if obj1 is None:
+                A = np.copy(A2)
+                b = np.copy(b2)
+                c = np.copy(c2)
+                table = np.copy(table2)
+                result = np.copy(result2)
+                del A1, b1, c1, A2, b2, c2
+            elif obj2 is None:
+                A = np.copy(A1)
+                b = np.copy(b1)
+                c = np.copy(c1)
+                table = np.copy(table1)
+                result = np.copy(result1)
+                del A1, b1, c1, A2, b2, c2
+            elif obj1 > obj2:
+                A = np.copy(A1)
+                b = np.copy(b1)
+                c = np.copy(c1)
+                table = np.copy(table1)
+                result = np.copy(result1)
+                del A1, b1, c1, A2, b2, c2
+            else:
+                A = np.copy(A2)
+                b = np.copy(b2)
+                c = np.copy(c2)
+                table = np.copy(table2)
+                result = np.copy(result2)
+                del A1, b1, c1, A2, b2, c2
         else:
-            count += 1
-    if count == num_constr: # không tìm được cover cut
-        return c , a , b , num_values , num_constr
+            A = np.copy(A_cut)
+            b = np.copy(b_cut)
+            c = np.copy(c_cut)
+            table = np.copy(table_cut)
+            result = np.copy(result_cut)
+            del A_cut, b_cut, c_cut, table_cut, result_cut
 
-num_constr , num_values , a , b , c = bb.readInput()
-node, bestNode = init(c, a, b)
-bestNode = branch_and_cut(c , a , b , node , bestNode , num_values , num_constr)
-print("X : " + str(bestNode.x))
-print("Obj : " + str(bestNode.res))
-
-
-
-
-
+def main():
+    path = 'data/sc_9_0'
+    converts = Convert(path)
+    A, b, c = converts.ExportData()
+    branchandcut(A, b, c)
+main()
