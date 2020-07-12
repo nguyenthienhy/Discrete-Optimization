@@ -86,7 +86,8 @@ def isEqual(a , b):
     return True
 
 def branch_and_cut(c , a , b , node , bestNode , num_values , num_constr):
-    print("Current values : " + str(node.x))
+    step = 0
+    print("Iteration : " + str(step))
     if node.status != 0:
         bestNode.res = round(bestNode.res, 3)
         return bestNode
@@ -121,6 +122,7 @@ def branch_and_cut(c , a , b , node , bestNode , num_values , num_constr):
                     if nodeRightChild.res <= bestNode.res:
                         bestNode = branch_and_cut(c, a, b, nodeLeftChild, bestNode , num_values , num_constr)
             else: # nếu như tìm được cut thì quay lại bước 1
+                step += 1
                 bestNode.res = linprog(c_new , a_new , b_new , None, None).fun
                 bestNode = branch_and_cut(c_new , a_new , b_new , node , bestNode , num_values_new , num_constr_new)
     else:
@@ -136,6 +138,7 @@ def get_cut_and_constraints(x , c , a , b , num_values , num_constr):
         z_values = np.concatenate((1 - x , [0]) , axis = 0)
         base = b[index]
         if hasCoverCut(num_values + 1 , z_constr , z_values , base): # nếu như tìm được cover cut
+            print("Has cover cut at constraint : " + str(index) + ", Continue Phase 2......")
             x_temp = getValues(num_values + 1 , z_constr , z_values , base)
             x_temp = np.asarray(x_temp)
             x_minus = x_temp - x
