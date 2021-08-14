@@ -6,7 +6,7 @@ import numpy as np
 from collections import namedtuple
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
-import Vehical_with_many_strategy
+import vehical_with_many_strategy
 
 Customer = namedtuple("Customer", ['index', 'demand', 'x', 'y'])
 
@@ -29,7 +29,7 @@ def solve_it(input_data):
         customers.append(Customer(i-1, int(parts[0]), float(parts[1]), float(parts[2])))
 
     if customer_count <= 51:
-        app = Vehical_with_many_strategy.Vehical_Solver(customers , vehicle_count , vehicle_capacity)
+        app = vehical_with_many_strategy.Vehical_Solver(customers , vehicle_count , vehicle_capacity)
         app.solve()
         outputData = app.returnOutPut()
     else:
